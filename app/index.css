@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter", sans-serif;
+
+  --color-surface: #09090b;
+  --color-surface-dim: #121214;
+  --color-surface-bright: #18181b;
+  --color-surface-container-lowest: #09090b;
+  --color-surface-container-low: #121214;
+  --color-surface-container: #18181b;
+  --color-surface-container-high: #27272a;
+  --color-surface-container-highest: #3f3f46;
+  
+  --color-on-surface: #ffffff;
+  --color-on-surface-variant: #a1a1aa;
+  
+  --color-primary: #6366f1;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #1e1b4b;
+  --color-on-primary-container: #c7d2fe;
+  
+  --color-accent: #a855f7;
+  --color-error: #fb7185;
+  --color-success: #10b981;
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-on-surface font-sans;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/5 border border-white/10 backdrop-blur-sm rounded-3xl;
+  }
+  
+  .accent-gradient {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  }
+
+  .pill-nav {
+    @apply bg-[#18181b]/80 border-t border-white/5 backdrop-blur-md rounded-2xl;
+  }
+}
