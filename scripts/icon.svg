@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="220" fill="#0f172a"/>
+  
+  <!-- Wallet body -->
+  <rect x="230" y="340" width="380" height="300" rx="36" fill="none" stroke="white" stroke-width="52" stroke-linejoin="round"/>
+  <!-- Wallet flap -->
+  <path d="M230 440 L230 370 Q230 310 290 310 L540 310" fill="none" stroke="white" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Coin stack -->
+  <ellipse cx="660" cy="600" rx="72" ry="28" fill="none" stroke="white" stroke-width="44"/>
+  <path d="M588 600 L588 540" fill="none" stroke="white" stroke-width="44" stroke-linecap="round"/>
+  <path d="M732 600 L732 540" fill="none" stroke="white" stroke-width="44" stroke-linecap="round"/>
+  <ellipse cx="660" cy="540" rx="72" ry="28" fill="none" stroke="white" stroke-width="44"/>
+  <path d="M588 540 L588 490" fill="none" stroke="white" stroke-width="44" stroke-linecap="round"/>
+  <path d="M732 540 L732 490" fill="none" stroke="white" stroke-width="44" stroke-linecap="round"/>
+  <ellipse cx="660" cy="490" rx="72" ry="28" fill="none" stroke="white" stroke-width="44"/>
+  
+  <!-- Upward arrow -->
+  <line x1="340" y1="620" x2="700" y2="210" stroke="white" stroke-width="52" stroke-linecap="round"/>
+  <polyline points="560,195 700,210 685,350" fill="none" stroke="white" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

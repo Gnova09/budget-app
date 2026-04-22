@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Banknote,
   Bell,
+  Calendar,
   Car,
   Check,
   ChevronRight,
@@ -56,6 +57,7 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { G, Circle as SvgCircle } from 'react-native-svg';
 import * as Api from './services/api';
 
 // --- Types ---
@@ -160,7 +162,7 @@ const TopBar = ({ title, showBack, onBack }: { title: string; showBack?: boolean
           <Text style={styles.avatarText}>G</Text>
         </LinearGradient>
       )}
-      {!showBack && <Text style={[styles.appTitle, { color: c.onSurface }]}>FinTrack</Text>}
+      {!showBack && <Text style={[styles.appTitle, { color: c.onSurface }]}>Finanzas</Text>}
     </View>
     {showBack && <Text style={[styles.screenTitle, { color: c.onSurface }]}>{title}</Text>}
     {!showBack && (
@@ -200,80 +202,269 @@ const BottomNav = ({ active, onNav }: { active: Screen; onNav: (s: Screen) => vo
 
 // --- Screens ---
 
-const HomeScreen = ({ data }: { data: DashboardData | null; onSelectMonth: () => void }) => {
+const DONUT_COLORS = ['#1f2937', '#6b7280', '#9ca3af', '#c4b5fd'];
+const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const DonutChart = ({ segments, size = 160, strokeWidth = 28 }: {
+  segments: { percent: number; color: string }[]; size?: number; strokeWidth?: number;
+}) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  return (
+    <Svg width={size} height={size}>
+      <G rotation="-90" origin={`${size / 2}, ${size / 2}`}>
+        {segments.map((seg, i) => {
+          const dash = (seg.percent / 100) * circumference;
+          const gap = circumference - dash;
+          const o = offset;
+          offset += dash;
+          return (
+            <SvgCircle
+              key={i}
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke={seg.color}
+              strokeWidth={strokeWidth}
+              strokeDasharray={`${dash} ${gap}`}
+              strokeDashoffset={-o}
+              fill="none"
+              strokeLinecap="round"
+            />
+          );
+        })}
+      </G>
+    </Svg>
+  );
+};
+
+interface MonthlySpend { month: string; label: string; total: number }
+
+const HomeScreen = ({ data, expenses }: { data: DashboardData | null; expenses: Expense[] }) => {
   const { c } = useTheme();
+  const [trend, setTrend] = useState<MonthlySpend[]>([]);
+
+  // Load 6-month spending trend
+  useEffect(() => {
+    const loadTrend = async () => {
+      const now = new Date();
+      const months: MonthlySpend[] = [];
+      const promises = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = MONTH_LABELS[d.getMonth()];
+        months.push({ month: key, label, total: 0 });
+        promises.push(
+          Api.getDashboard(key)
+            .then((dash: DashboardData) => { months[5 - i].total = dash?.totalSpent ?? 0; })
+            .catch(() => {})
+        );
+      }
+      await Promise.all(promises);
+      setTrend([...months]);
+    };
+    loadTrend();
+  }, []);
+
   if (!data) return <View style={styles.centered}><Text style={[styles.loadingText, { color: c.onSurfaceVariant }]}>Cargando...</Text></View>;
 
   const totalBudget = data.totalBudget ?? 0;
   const totalSpent = data.totalSpent ?? 0;
-  const remainingBudget = totalBudget - totalSpent;
+  const remaining = totalBudget - totalSpent;
+  const usedPercent = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
   const categories = data.categories ?? [];
+
+  // Build top-N categories for donut + "Others"
+  const sorted = [...categories].sort((a, b) => b.spent - a.spent);
+  const topN = 3;
+  const topCats = sorted.slice(0, topN);
+  const othersSpent = sorted.slice(topN).reduce((s, cat) => s + cat.spent, 0);
+  const donutData = [
+    ...topCats.map((cat, i) => ({
+      category: cat.category,
+      spent: cat.spent,
+      percent: totalSpent > 0 ? Math.round((cat.spent / totalSpent) * 100) : 0,
+      color: DONUT_COLORS[i % DONUT_COLORS.length],
+    })),
+    ...(othersSpent > 0 ? [{
+      category: 'Otros',
+      spent: othersSpent,
+      percent: totalSpent > 0 ? Math.round((othersSpent / totalSpent) * 100) : 0,
+      color: DONUT_COLORS[3],
+    }] : []),
+  ];
+
+  // Month label
+  const now = new Date();
+  const monthLabel = MONTH_LABELS[now.getMonth()];
+
+  // Bar chart max
+  const maxTrend = Math.max(...trend.map(t => t.total), 1);
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 140 }}>
-      <View style={{ marginBottom: 24 }}>
-        <Text style={[styles.labelSmall, { color: c.zinc500 }]}>Mes Actual</Text>
-        <Text style={[styles.heading, { color: c.onSurface }]}>{Api.getAutoMonth()}</Text>
+
+      {/* Total Spent vs Budget */}
+      <View style={[homeS.card, { backgroundColor: c.cardBg, borderColor: c.cardBorder }]}>  
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <Text style={{ color: c.zinc500, fontSize: 13, fontWeight: '500' }}>Total Gastado vs Presupuesto</Text>
+          <View style={[homeS.monthBadge, { backgroundColor: c.white10 }]}>
+            <Calendar size={14} color={c.onSurface} />
+            <Text style={{ color: c.onSurface, fontSize: 12, fontWeight: '600' }}>{monthLabel}</Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+          <Text style={{ color: c.onSurface, fontSize: 28, fontWeight: '800' }}>
+            ${totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </Text>
+          <Text style={{ color: c.zinc500, fontSize: 14 }}>
+            / ${totalBudget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </Text>
+        </View>
+        <View style={[homeS.progressBg, { backgroundColor: c.progressBg, marginTop: 12 }]}>
+          <View style={[homeS.progressFill, { width: `${usedPercent}%`, backgroundColor: c.onSurface }]} />
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+          <Text style={{ color: c.zinc500, fontSize: 12 }}>{Math.round(usedPercent)}% usado</Text>
+          <Text style={{ color: c.zinc500, fontSize: 12 }}>
+            ${remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })} restante
+          </Text>
+        </View>
       </View>
 
-      <LinearGradient colors={['#6366f1', '#a855f7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balanceCard}>
-        <Text style={styles.balanceLabel}>Balance Total</Text>
-        <Text style={styles.balanceAmount}>${remainingBudget.toLocaleString()}</Text>
-        <View style={styles.balanceRow}>
+      {/* Expense Breakdown — Donut */}
+      <View style={[homeS.card, { backgroundColor: c.cardBg, borderColor: c.cardBorder }]}>  
+        <Text style={[homeS.cardTitle, { color: c.onSurface }]}>Desglose de Gastos</Text>
+        <View style={{ alignItems: 'center', marginVertical: 16 }}>
           <View>
-            <Text style={styles.balanceSubLabel}>Presupuesto</Text>
-            <Text style={styles.balanceSubValue}>${totalBudget.toLocaleString()}</Text>
-          </View>
-          <View style={styles.balanceDivider} />
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.balanceSubLabel}>Gastado</Text>
-            <Text style={styles.balanceSubValue}>-${totalSpent.toLocaleString()}</Text>
+            <DonutChart
+              segments={donutData.map(d => ({ percent: d.percent, color: d.color }))}
+              size={170}
+              strokeWidth={30}
+            />
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+              <Wallet size={22} color={c.zinc500} />
+            </View>
           </View>
         </View>
-      </LinearGradient>
-
-      <View style={{ marginTop: 8 }}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: c.zinc400 }]}>Categorías</Text>
-          <Text style={[styles.sectionAction, { color: c.indigo400 }]}>Detalles</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+          {donutData.map(d => (
+            <View key={d.category} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, width: '48%', marginBottom: 4 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: d.color }} />
+              <Text style={{ color: c.onSurface, fontSize: 13 }}>{d.category} {d.percent}%</Text>
+            </View>
+          ))}
         </View>
+      </View>
 
-        {categories.map((cat) => {
-          const spent = cat.spent ?? 0;
-          const limit = cat.limit ?? 1;
-          const percent = Math.min((spent / limit) * 100, 100);
-          return (
-            <View key={cat.category} style={[styles.catCard, { backgroundColor: c.cardBg, borderColor: c.cardBorder }]}>
-              <View style={styles.catRow}>
-                <View style={styles.catLeft}>
-                  <View style={[styles.catIconBox, { backgroundColor: c.white5 }]}>
-                    {getCategoryIcon(cat.category, 20, c.onSurface)}
-                  </View>
-                  <View>
-                    <Text style={[styles.catName, { color: c.onSurface }]}>{cat.category}</Text>
-                    <Text style={[styles.catSub, { color: c.zinc500 }]}>Meta Mensual</Text>
-                  </View>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={[styles.catSpent, { color: c.onSurface }]}>-${spent.toLocaleString()}</Text>
-                  <Text style={[styles.catBudget, { color: c.zinc500 }]}>de ${limit.toLocaleString()}</Text>
-                </View>
+      {/* Spending Trend — Bar Chart */}
+      <View style={[homeS.card, { backgroundColor: c.cardBg, borderColor: c.cardBorder }]}>  
+        <Text style={[homeS.cardTitle, { color: c.onSurface }]}>Tendencia de Gastos</Text>
+        <View style={homeS.barContainer}>
+          {trend.map((m, i) => {
+            const h = maxTrend > 0 ? (m.total / maxTrend) * 130 : 0;
+            const isCurrent = i === trend.length - 1;
+            return (
+              <View key={m.month} style={{ alignItems: 'center', flex: 1 }}>
+                <View style={[homeS.bar, {
+                  height: Math.max(h, 4),
+                  backgroundColor: isCurrent ? c.onSurface : (c.progressBg),
+                  borderRadius: 6,
+                }]} />
+                <Text style={{
+                  color: isCurrent ? c.onSurface : c.zinc500,
+                  fontSize: 11,
+                  fontWeight: isCurrent ? '700' : '400',
+                  marginTop: 6,
+                }}>{m.label}</Text>
               </View>
-              <View style={[styles.progressBg, { backgroundColor: c.progressBg }]}>
-                <LinearGradient
-                  colors={percent >= 100 ? [colors.error, colors.error] : ['#6366f1', '#a855f7']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.progressFill, { width: `${percent}%` }]}
-                />
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Categories Breakdown */}
+      <View style={[homeS.card, { backgroundColor: c.cardBg, borderColor: c.cardBorder }]}>  
+        <Text style={[homeS.cardTitle, { color: c.onSurface }]}>Categorías</Text>
+        {donutData.map((d, i) => (
+          <View key={d.category} style={[homeS.catRow, i < donutData.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.cardBorder }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={[homeS.catIcon, { backgroundColor: d.color + '22' }]}>
+                {d.category === 'Otros'
+                  ? <Shapes size={18} color={d.color} />
+                  : getCategoryIcon(d.category, 18, d.color)}
+              </View>
+              <View>
+                <Text style={{ color: c.onSurface, fontSize: 14, fontWeight: '600' }}>{d.category}</Text>
+                <Text style={{ color: c.zinc500, fontSize: 12 }}>{d.percent}%</Text>
               </View>
             </View>
-          );
-        })}
+            <Text style={{ color: c.onSurface, fontSize: 15, fontWeight: '600' }}>
+              ${d.spent.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </Text>
+          </View>
+        ))}
       </View>
     </ScrollView>
   );
 };
+
+const homeS = StyleSheet.create({
+  card: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 14,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  monthBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  progressBg: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  barContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 170,
+    marginTop: 16,
+    paddingBottom: 4,
+  },
+  bar: {
+    width: 36,
+  },
+  catRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  catIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
 
 const HistoryScreen = ({ expenses, onDelete }: { expenses: Expense[]; onDelete: (id: string) => void }) => {
   const { c } = useTheme();
@@ -1117,7 +1308,7 @@ export default function App() {
 
       <View style={{ flex: 1 }}>
         {activeScreen === 'Home' && (
-          <HomeScreen data={dashboardData} onSelectMonth={() => {}} />
+          <HomeScreen data={dashboardData} expenses={expenses} />
         )}
         {activeScreen === 'History' && (
           <HistoryScreen expenses={expenses} onDelete={handleDeleteExpense} />
