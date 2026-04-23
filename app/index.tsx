@@ -43,10 +43,11 @@ import {
   Wifi,
   X
 } from 'lucide-react-native';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Dimensions,
+  Linking,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -603,10 +604,10 @@ const BudgetScreen = ({ data }: { data: DashboardData | null }) => {
   );
 };
 
-const AddExpenseScreen = ({ onSave, onCancel, budgetCategories }: { onSave: (e: any) => void; onCancel: () => void; budgetCategories: CategorySummary[] }) => {
+const AddExpenseScreen = ({ onSave, onCancel, budgetCategories, initialCategory }: { onSave: (e: any) => void; onCancel: () => void; budgetCategories: CategorySummary[]; initialCategory?: string }) => {
   const { c } = useTheme();
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState(budgetCategories.length > 0 ? budgetCategories[0].category : '');
+  const [category, setCategory] = useState(initialCategory || (budgetCategories.length > 0 ? budgetCategories[0].category : ''));
   const [note, setNote] = useState('');
   const [catSearch, setCatSearch] = useState('');
 
@@ -1231,10 +1232,35 @@ export default function App() {
   const [prevScreen, setPrevScreen] = useState<Screen>('Home');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickAddCategory, setQuickAddCategory] = useState<string | undefined>(undefined);
+  const dataLoadedRef = useRef(false);
   const currentMonth = Api.getAutoMonth();
 
   const c = isDark ? darkColors : lightColors;
   colors = c; // keep static ref in sync
+
+  // Deep link handler for widget
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      const url = event.url;
+      if (url.startsWith('budgetapp://quick-add')) {
+        const params = new URLSearchParams(url.split('?')[1] || '');
+        const cat = params.get('category');
+        if (cat) setQuickAddCategory(decodeURIComponent(cat));
+        setShowQuickAdd(true);
+      }
+    };
+
+    // Handle app opened from deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink({ url });
+    });
+
+    // Handle deep link while app is running
+    const sub = Linking.addEventListener('url', handleDeepLink);
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem('theme').then((val) => {
@@ -1278,6 +1304,7 @@ export default function App() {
     try {
       await Api.createExpense(expense);
       await loadData();
+      setQuickAddCategory(undefined);
       setActiveScreen('History');
     } catch (err) {
       console.error('Failed to save expense', err);
@@ -1327,8 +1354,9 @@ export default function App() {
       {activeScreen === 'Add' && (
         <AddExpenseScreen
           onSave={handleSaveExpense}
-          onCancel={() => setActiveScreen(prevScreen)}
+          onCancel={() => { setQuickAddCategory(undefined); setActiveScreen(prevScreen); }}
           budgetCategories={dashboardData?.categories ?? []}
+          initialCategory={quickAddCategory}
         />
       )}
 

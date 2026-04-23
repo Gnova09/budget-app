@@ -41,6 +41,23 @@
             "backgroundColor": "#0f172a"
           }
         }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "QuickExpense",
+              "label": "Gasto Rápido",
+              "minWidth": "320dp",
+              "minHeight": "200dp",
+              "description": "Agregar gastos rápidamente desde el escritorio",
+              "previewImage": "./assets/images/icon.png",
+              "resizeMode": "horizontal|vertical",
+              "widgetFeatures": "reconfigurable"
+            }
+          ]
+        }
       ]
     ],
     "experiments": {
